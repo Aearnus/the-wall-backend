@@ -30,7 +30,8 @@ class Stroke
     #
     # @return [String] the serialized class
     def serialize
-        Base64.encode64([*@p1, *@p2, *@dp1].pack("DDDDDD"))
+        #Base64.encode64([*@p1, *@p2, *@dp1].pack("DDDDDD"))
+        JSON.generate([{x: @p1[0], y: @p1[1]}, {x: @p2[0], y: @p2[1]}])
     end
 end
 
@@ -63,6 +64,7 @@ class Chunk
     # @param p2 [(Fixnum, Fixnum)] the second coord
     # @param dp1 [(Fixnum, Fixnum)] the velocity at point p1
     def draw(p1, p2, dp1)
+        puts "adding a stroke in chunk #{@x} #{@y}"
         @strokes << Stroke.new(p1, p2, dp1)
     end
 
@@ -73,6 +75,9 @@ class Chunk
     end
 end
 
+def lerp(start, stop, step)
+    (stop * step) + (start * (1.0 - step))
+end
 class ChunkGrid
     attr_reader :chunks
 
@@ -87,14 +92,28 @@ class ChunkGrid
     # @param p2 [(Fixnum, Fixnum)] the second coord
     # @param dp1 [(Fixnum, Fixnum)] the velocity at point p1
     def draw(p1, p2, dp1)
-        amount_of_chunk_crossings = (p2[0] - p1[0]).abs.floor + (p2[1] - p1[1]).abs.floor
-        if amount_of_chunk_crossings == 0
-            key = [p1[0], p1[1]]
+        if p1[0].floor == p2[0].floor && p1[1].floor == p2[1].floor
+            key = [p1[0].floor, p1[1].floor]
             if not @chunks.key? key
                 @chunks[key] = Chunk.new(*key)
             end
-            @chunks[key].draw([p1[0] - p1[0].floor, p2[0] - p2[0].floor, dp1])
-        # TODO: amount_of_chunk_crossings == 1
+            @chunks[key].draw([p1[0] - p1[0].floor, p1[1] - p1[1].floor], [p2[0] - p2[0].floor, p2[1] - p2[1].floor],  dp1)
+        ## dirty hack alert
+        elsif p1[0].floor == p2[0].floor && (p1[1].floor - p2[1].floor).abs == 1
+            ## make sure y coords are strictly increasing
+            if p1[1] > p2[1]
+                p1, p2 = p2, p1
+            end
+            keys = [[p1[0].floor, p1[1].floor], [p1[0].floor, p2[1].floor]]
+            keys.each do |key|
+                if not @chunks.key? key
+                    @chunks[key] = Chunk.new(*key)
+                end
+            end
+            @chunks[keys[0]].draw([p1[0] - p1[0].floor, p1[1] - p1[1].floor],
+                                  #[lerp(p1[0] - p1[0].floor, p2[0] - p2[0].floor, (1.0 - p1[1] - p1[1].floor)), 1.0],
+                                  [p1[0] - p1[0].floor, 1.0],
+                                  dp1)
         else
             puts "illegal draw detected: #{p1} to #{p2}"
             return

@@ -1,0 +1,103 @@
+<html>
+    <head>
+        <script type="text/javascript">
+            function ordered_distance(x1, y1, x2, y2) {
+                return ((x2 - x1)**2 + (y2 - y1)**2);
+            }
+
+            function init() {
+                canvas = document.getElementById("canvas");
+                ctx = canvas.getContext("2d");
+                framecounter = 0;
+                requests = [];
+                ismousedown = false;
+                currentmousepath = null;
+                makerequests();
+
+                canvas.addEventListener("mousedown", function(e) {
+                    ismousedown = true;
+                });
+                canvas.addEventListener("mousemove", function(e) {
+                    let boundingbox = canvas.getBoundingClientRect();
+                    let realX = e.clientX - boundingbox.left;
+                    let realY = e.clientY - boundingbox.top;
+                    if (ismousedown) {
+                        if (currentmousepath === null) {
+                            currentmousepath = [[realX, realY]];
+                        } else {
+                            if (ordered_distance(currentmousepath[currentmousepath.length - 1][0], currentmousepath[currentmousepath.length - 1][1], realX, realY) > 4) {
+                                lastmousepos = currentmousepath.push([realX, realY]);
+                            }
+                        }
+                    }
+                });
+                canvas.addEventListener("mouseup", function(e) {
+                    if (currentmousepath.length > 2) {
+                        for (var i = 0; i < currentmousepath.length - 1; i++) {
+                            postdrawrequest(currentmousepath[i][0] / 100 - 2.0, currentmousepath[i][1] / 100 - 2.0, currentmousepath[i + 1][0] / 100 - 2.0, currentmousepath[i + 1][1] / 100 - 2.0)
+                        }
+                    }
+                    makerequests();
+                    currentmousepath = null;
+                    ismousedown = false;
+                });
+                window.requestAnimationFrame(mainloop);
+            }
+
+            function makerequests() {
+                requests = [];
+                for (var x = -2; x <= 2; x++) {
+                    for (var y = -2; y <= 2; y++) {
+                        let req = new XMLHttpRequest();
+                        req.open("GET", "http://192.168.43.131:4567/chunk/" + x.toString() + "/" + y.toString());
+                        req.onload = function() {
+                            if (req.readyState === req.DONE) {
+                                if (req.status === 200) {
+                                    requests.push(JSON.parse(req.responseText));
+                                }
+                            }
+                        };
+                        req.send(null);
+                    }
+                }
+            }
+
+            function renderrequests() {
+                ctx.lineWidth = 3.0;
+                for (var chunk of requests) {
+                    for (var stroke of chunk["strokes"]) {
+                        let stroke_object = JSON.parse(stroke);
+                        ctx.beginPath();
+                        ctx.moveTo(stroke_object[0]["x"] * 100 + (chunk["x"] + 2) * 100, stroke_object[0]["y"] * 100 + (chunk["y"] + 2) * 100);
+                        ctx.lineTo(stroke_object[1]["x"] * 100 + (chunk["x"] + 2) * 100, stroke_object[1]["y"] * 100 + (chunk["y"] + 2) * 100);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            function postdrawrequest(x1, y1, x2, y2) {
+                let req = new XMLHttpRequest();
+                req.open("POST", "http://localhost:4567/draw/" + x1 + "/" + y1 + "/" + x2 + "/" + y2);
+                req.send(null);
+            }
+
+            function mainloop() {
+                framecounter += 1;
+                if (framecounter % 200 == 0) {
+                    framecounter = 0;
+                    // make all the drawing requests every 200 frames
+                    makerequests();
+                }
+                renderrequests();
+
+                window.requestAnimationFrame(mainloop);
+            }
+
+            window.onload = init;
+        </script>
+    </head>
+    <body>
+        <canvas id="canvas" width="500" height="500" style="border: 2px solid">
+        </canvas>
+    </body>
+</html>
