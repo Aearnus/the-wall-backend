@@ -1,4 +1,5 @@
 require "json"
+require "base64"
 
 class Stroke
     attr_accessor :p1, :p2, :dp1
@@ -20,7 +21,7 @@ class Stroke
     # @param serialized [String] the serialized Stroke
     # @return [Stroke] an instance of the Stroke class
     def self.new_from_serialized(serialized)
-        args = serialized.unpack("DDDDDD")
+        args = Base64.decode64(serialized).unpack("DDDDDD")
         puts args
         self.new(args[0..1], args[2..3], args[4..5])
     end
@@ -29,7 +30,7 @@ class Stroke
     #
     # @return [String] the serialized class
     def serialize
-        [*@p1, *@p2, *@dp1].pack("DDDDDD")
+        Base64.encode64([*@p1, *@p2, *@dp1].pack("DDDDDD"))
     end
 end
 
@@ -62,7 +63,7 @@ class Chunk
     # @param p2 [(Fixnum, Fixnum)] the second coord
     # @param dp1 [(Fixnum, Fixnum)] the velocity at point p1
     def draw(p1, p2, dp1)
-        @strokes << Stroke(p1, p2, dp1)
+        @strokes << Stroke.new(p1, p2, dp1)
     end
 
     # Serializes the chunk into a textual format
@@ -73,6 +74,8 @@ class Chunk
 end
 
 class ChunkGrid
+    attr_reader :chunks
+
     # Creates an instance of the ChunkGrid class
     # @note This uses a grid of chunks of length 1.
     def initialize
@@ -84,13 +87,29 @@ class ChunkGrid
     # @param p2 [(Fixnum, Fixnum)] the second coord
     # @param dp1 [(Fixnum, Fixnum)] the velocity at point p1
     def draw(p1, p2, dp1)
-        x_chunk_bounds = (p1[0].floor .. p2[0].floor).to_a
-        y_chunk_bounds = (p1[1].floor .. p2[1].floor).to_a
-
-        x_chunk_bounds.each do |x_chunk|
-            y_chunk_bounds.each do |y_chunk|
-
+        amount_of_chunk_crossings = (p2[0] - p1[0]).abs.floor + (p2[1] - p1[1]).abs.floor
+        if amount_of_chunk_crossings == 0
+            key = [p1[0], p1[1]]
+            if not @chunks.key? key
+                @chunks[key] = Chunk.new(*key)
             end
+            @chunks[key].draw([p1[0] - p1[0].floor, p2[0] - p2[0].floor, dp1])
+        # TODO: amount_of_chunk_crossings == 1
+        else
+            puts "illegal draw detected: #{p1} to #{p2}"
+            return
         end
+
+
+    end
+
+    # Serializes the chunk grid into a textual format
+    # @return [String] the serialized class
+    def serialize
+        object = {grid: {}}
+        @chunks.keys.each do |k|
+            object[:grid]["#{k[0]} #{k[1]}"] = @chunks[k].serialize
+        end
+        JSON.generate(object)
     end
 end
